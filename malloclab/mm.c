@@ -1,10 +1,11 @@
 /*
  * mm.c
  * niloyg - Niloy Gupta
- *
+ * email- niloyg@andrew.cmu.edu
  * NOTE TO STUDENTS: Replace this header comment with your own header
  * comment that gives a full description of your solution.
  */
+
 
 #include <assert.h>
 #include <stdio.h>
@@ -13,7 +14,6 @@
 #include <string.h>
 #include <unistd.h>
 #include "contracts.h"
-
 #include "mm.h"
 #include "memlib.h"
 
