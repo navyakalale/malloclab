@@ -337,7 +337,6 @@ void *realloc(void *oldptr, size_t size)
     if(oldptr == NULL) {
 	return malloc(size);
     }
-
     newptr = malloc(size);
 
     /* If realloc() fails the original block is left untouched  */
