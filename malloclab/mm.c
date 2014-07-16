@@ -158,7 +158,6 @@ static inline uint32_t* block_prev(uint32_t* const block) {
 
     return block - block_size(block - 1) - 2;
 }
-
 // Return the header to the next block
 static inline uint32_t* block_next(uint32_t* const block) {
     REQUIRES(block != NULL);
