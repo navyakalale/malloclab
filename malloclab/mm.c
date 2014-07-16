@@ -14,6 +14,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "contracts.h"
+
 #include "mm.h"
 #include "memlib.h"
 
@@ -21,7 +22,7 @@
 // Create aliases for driver tests
 // DO NOT CHANGE THE FOLLOWING!
 #ifdef DRIVER
-#define malloc malloc
+#define malloc mm_malloc
 #define free mm_free
 #define realloc mm_realloc
 #define calloc mm_calloc
@@ -47,33 +48,31 @@
 #endif
 
 
-/* Define basic constants and macros*/
-#define WSIZE 4
-#define DSIZE 8
-#define CHUNKSIZE (1<<12) /* Extend heap by this size*/
+/* Basic constants and macros */
+#define WSIZE       4       /* Word and header/footer size (bytes) */ //line:vm:mm:beginconst
+#define DSIZE       8       /* Doubleword size (bytes) */
+#define CHUNKSIZE  (1<<12)  /* Extend heap by this amount (bytes) */  //line:vm:mm:endconst
 
-#define MAX(x,y) ((x)<(y)?(x):(y))
+#define MAX(x, y) ((x) > (y)? (x) : (y))
 
-/*Combine size and allocated bit to one word*/
-#define PACK(size,alloc) ((size)|(alloc))
+/* Pack a size and allocated bit into a word */
+#define PACK(size, alloc)  ((size) | (alloc)) //line:vm:mm:pack
 
-/*Read and write a word at address p*/
+/* Read and write a word at address p */
+#define GET(p)       (*(unsigned int *)(p))            //line:vm:mm:get
+#define PUT(p, val)  (*(unsigned int *)(p) = (val))    //line:vm:mm:put
 
-#define GET(p) (*(unsigned int *)(p))
-#define PUT(p,val) (*(unsigned int *)(p) = (val))
+/* Read the size and allocated fields from address p */
+#define GET_SIZE(p)  (GET(p) & ~0x7)                   //line:vm:mm:getsize
+#define GET_ALLOC(p) (GET(p) & 0x1)                    //line:vm:mm:getalloc
 
-/* Read the size and allocated fields from address p*/
-#define GET_SIZE(p) (GET(p) & ~0x7)
-#define GET_ALLOC(p) (GET(p)&0x1)
+/* Given block ptr bp, compute address of its header and footer */
+#define HDRP(bp)       ((char *)(bp) - WSIZE)                      //line:vm:mm:hdrp
+#define FTRP(bp)       ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE) //line:vm:mm:ftrp
 
-/* Get address of block pointer's header and footer*/
-#define HDRP(bp) ((char *)(bp) - WSIZE)
-#define FTRP(bp) ((char *)(bp) + GET_SIZE(HDRP(bp)) - DSIZE)
-
-/* Given block pointer, computer address of previous block and next block*/
-
-#define NEXT_BLKP(bp) ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
-#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
+/* Given block ptr bp, compute address of next and previous blocks */
+#define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE))) //line:vm:mm:nextblkp
+#define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE))) //line:vm:mm:prevblkp
 
 
 
@@ -284,7 +283,7 @@ void *malloc (size_t size)
     /* Search the free list for a fit */
     if ((bp = find_fit(asize)) != NULL) {  //line:vm:mm:findfitcall
 	place(bp, asize);                  //line:vm:mm:findfitplace
-	 mm_checkheap(1);
+	 //mm_checkheap(1);
 	return bp;
     }
 
@@ -293,7 +292,7 @@ void *malloc (size_t size)
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL)
 	return NULL;                                  //line:vm:mm:growheap2
     place(bp, asize);                                 //line:vm:mm:growheap3
-    mm_checkheap(1);
+   //mm_checkheap(1);
     return bp;
 }
 
@@ -316,7 +315,7 @@ void free (void *ptr) {
 	    PUT(HDRP(ptr), PACK(size, 0));
 	    PUT(FTRP(ptr), PACK(size, 0));
 	    coalesce(ptr);
-	    mm_checkheap(1);
+	    //mm_checkheap(1);
 }
 
 /*
