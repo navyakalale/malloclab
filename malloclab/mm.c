@@ -2,8 +2,25 @@
  * mm.c
  * niloyg - Niloy Gupta
  * email- niloyg@andrew.cmu.edu
- * NOTE TO STUDENTS: Replace this header comment with your own header
- * comment that gives a full description of your solution.
+ *
+ *
+ * This submission for the malloc lab checkpoint uses an explicit list implementation
+ * with a first fir strategy.
+ *
+ * A free block has the following structure
+ * Header(4 bytes)|Next PTR(8 bytes)| PREV PTR(8 bytes)|Footer(4 bytes)
+ *
+ * An allocated block has the following structure
+ * Header(4 bytes)|Payload (size)|Footer(4 bytes)
+ *
+ * When malloc is called, it returns the allocated amount of memory.
+ * If it runs out of memeory blocks, it more from sbrk.
+ *
+ * The free block provided by malloc is fetched from the free list aka
+ * a bi-directinal linkedlist of pointers to free blocks
+ *
+ * When a block is freed by calling free, it is coalesced i.e. merged with adjoining free blocks
+ * if any and inserted at the head of the free list.
  */
 
 
