@@ -68,6 +68,9 @@
 #define DSIZE       8       /* Doubleword size (bytes) */
 #define CHUNKSIZE  1<<12  /* Extend heap by this amount (bytes) */
 #define HEADER_SIZE    24  /* minimum block size */
+#define LIST_NO 20
+
+
 
 /* 4 or 8 byte alignment */
 #define ALIGNMENT 8
@@ -112,18 +115,26 @@ static void *first_fit(size_t req_size);
 static void *coalesce(void *bp);
 static void printblock(void *bp);
 static void checkblock(void *bp);
-static void insert_free_list(void *bp);
-static void remove_block(void *bp);
-
+static void insert_free_list(void *bp, int size);
+static void remove_block(void *bp,int size);
+static int get_free_list_head( unsigned int n);
 
 
 
 static char *heap_list_head = 0;
 static char *heap_header = 0;
-static char *free_list_head = 0;
+static char *free_list_head[LIST_NO];
 //static int malloc_count = 0; /*DEbugging variables*/
 //static int free_count = 0;
 
+/* init_fee_list- Sets the pointers pointing to heads of free lists to 0
+ *
+ */
+void init_free_list(char *bp)
+{
+	for(int i=0;i<LIST_NO;i++)
+		free_list_head[i] = bp;
+}
 
 /*
  * Initialize: return -1 on error, 0 on success.
@@ -149,9 +160,10 @@ int mm_init(void)
 
 
 	/*initialize the free list pointer to the tail block*/
-	free_list_head = heap_list_head + DSIZE;
+
 	heap_list_head += DSIZE;
 	heap_header = heap_list_head;
+	init_free_list(heap_list_head);
 
 	/*return -1 if unable to get heap space*/
 	if ((heap_list_head = extend_heap(CHUNKSIZE / WSIZE)) == NULL )
@@ -203,7 +215,7 @@ static void *coalesce(void *bp)
 	else if (prev_alloc && !next_alloc)
 	{
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-		remove_block(NEXT_BLKP(bp));
+		remove_block(NEXT_BLKP(bp),GET_SIZE(HDRP(NEXT_BLKP(bp))));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size,0));
 	}
@@ -212,7 +224,7 @@ static void *coalesce(void *bp)
 	{
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
 		bp = PREV_BLKP(bp);
-		remove_block(bp);
+		remove_block(bp,GET_SIZE(HDRP(bp)));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
 
@@ -222,16 +234,15 @@ static void *coalesce(void *bp)
 	{
 		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(HDRP(NEXT_BLKP(bp)));
 		void *pbp = PREV_BLKP(bp);
-		remove_block(pbp);
+		remove_block(pbp, GET_SIZE(HDRP(pbp)));
 		void *nbp = NEXT_BLKP(bp);
-		remove_block(nbp);
+		remove_block(nbp, GET_SIZE(HDRP(nbp)));
 		bp = PREV_BLKP(bp);
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size, 0));
-
 	}
 
-	insert_free_list(bp);
+	insert_free_list(bp,size);
 	return bp;
 }
 
@@ -239,25 +250,28 @@ static void *coalesce(void *bp)
  * free list.
  *
  */
-static void insert_free_list(void *bp)
+static void insert_free_list(void *bp, int size)
 {
-	NEXT_FREE_BLK(bp) = free_list_head;
-	PREV_FREE_BLK(free_list_head) = bp;
+	int free_list_index = get_free_list_head(size);
+	NEXT_FREE_BLK(bp) = free_list_head[free_list_index];
+	PREV_FREE_BLK(free_list_head[free_list_index]) = bp;
 	PREV_FREE_BLK(bp) = NULL;
-	free_list_head = bp;
-
+	free_list_head[free_list_index] = bp;
 }
 
 /*remove_block - Removes the block from the free list
  * Sets the next pointer of the previous-free block of bp to the next-free block of bp
  * Sets the previous pointer of the next-free block of bp to the previous-free block of bp
  */
-static void remove_block(void *bp)
+static void remove_block(void *bp, int size)
 {
 	if (PREV_FREE_BLK(bp) != NULL )
 		NEXT_FREE_BLK(PREV_FREE_BLK(bp)) = NEXT_FREE_BLK(bp);
 	else
-			free_list_head = NEXT_FREE_BLK(bp);
+	{
+		int free_list_index = get_free_list_head(size);
+		free_list_head[free_list_index] = NEXT_FREE_BLK(bp);
+	}
 	PREV_FREE_BLK(NEXT_FREE_BLK(bp)) = PREV_FREE_BLK(bp);
 }
 /*
@@ -366,7 +380,7 @@ void *calloc (size_t nmemb, size_t size)
 }
 
 /*
- * alloc - Allocates  block of req_size bytes at start of free block 
+ * alloc - Allocates  block of req_size bytes at start of free block
  *         and split if free block is larger
  */
 static void alloc(void *free_block, size_t req_size)
@@ -378,7 +392,7 @@ static void alloc(void *free_block, size_t req_size)
 	{
     	PUT(HDRP(free_block), PACK(req_size, 1)); //Allocating the block
 		PUT(FTRP(free_block), PACK(req_size, 1));
-		remove_block(free_block);
+		remove_block(free_block,csize);
 		next_bp = NEXT_BLKP(free_block);
 		PUT(HDRP(next_bp), PACK(csize-req_size, 0));//Resetting the size of the free block
 		PUT(FTRP(next_bp), PACK(csize-req_size, 0));
@@ -388,7 +402,7 @@ static void alloc(void *free_block, size_t req_size)
 	{
 		PUT(HDRP(free_block), PACK(csize, 1));
 		PUT(FTRP(free_block), PACK(csize, 1));
-		remove_block(free_block);
+		remove_block(free_block,csize);
 	}
 
 }
@@ -401,10 +415,13 @@ static void *first_fit(size_t req_size)
 {
 
 	char *bp;
-	for (bp = free_list_head; GET_ALLOC(HDRP(bp)) == 0; bp = NEXT_FREE_BLK(bp) )
+	for (int i = 0; i < LIST_NO; i++)
 	{
-		if (req_size <= (size_t) GET_SIZE(HDRP(bp)))
-			return bp;
+		for (bp = free_list_head[i]; GET_ALLOC(HDRP(bp)) == 0; bp =NEXT_FREE_BLK(bp) )
+		{
+			if (req_size <= (size_t) GET_SIZE(HDRP(bp)))
+				return bp;
+		}
 	}
 	return NULL ; // No fit
 }
@@ -450,7 +467,7 @@ int mm_checkheap(int verbose)
 	if (verbose)
 	{
 		printf("Heap (%p):\n", heap_list_head);
-		printf("Free List (%p):\n", free_list_head);
+		//printf("Free List (%p):\n", free_list_head);
 	}
 
 	if ((GET_SIZE(HDRP(heap_header)) != HEADER_SIZE)
@@ -476,3 +493,17 @@ int mm_checkheap(int verbose)
 
 	return 0;
 }
+
+static int get_free_list_head( unsigned int n)
+{
+	int count = 0;
+	while(n>1)
+	{
+		n = n>>1;
+		count++;
+	}
+	if(count > LIST_NO-1 )
+		return  0;
+	return count;
+}
+
