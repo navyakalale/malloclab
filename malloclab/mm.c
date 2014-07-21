@@ -66,7 +66,7 @@
 
 #define WSIZE       4       /* Word and header/footer size (bytes) */
 #define DSIZE       8       /* Doubleword size (bytes) */
-#define CHUNKSIZE  1<<12  /* Extend heap by this amount (bytes) */
+#define CHUNKSIZE  1<<9  /* Extend heap by this amount (bytes) */
 #define HEADER_SIZE    24  /* minimum block size */
 #define LIST_NO 20
 
@@ -335,7 +335,8 @@ void *realloc(void *oldptr, size_t size)
 {
 	size_t oldsize;
 	void *newptr;
-
+	/* Adjust block size to include overhead and alignment reqs */
+	size_t req_size = MAX(ALIGN(size) + DSIZE, HEADER_SIZE);
 	/* If size == 0 then this is just free, and we return NULL. */
 	if (size == 0)
 	{
@@ -347,14 +348,28 @@ void *realloc(void *oldptr, size_t size)
 	if (oldptr == NULL )
 		return malloc(size);
 
-	newptr = malloc(size);
+	oldsize = GET_SIZE(HDRP(oldptr));
 
+	if(req_size == oldsize || (oldsize-req_size)<=HEADER_SIZE)
+		return oldptr;
+
+	if(req_size <= oldsize)
+	{
+		PUT(HDRP(oldptr),PACK(req_size,1));
+		PUT(FTRP(oldptr),PACK(req_size,1));
+		PUT(HDRP(NEXT_BLKP(oldptr)),PACK(oldsize-req_size,1));
+		PUT(FTRP(NEXT_BLKP(oldptr)),PACK(oldsize-req_size,1));
+		free(NEXT_BLKP(oldptr));
+		return oldptr;
+	}
+
+	newptr = malloc(size);
 	/* If realloc() fails the original block is left untouched  */
 	if (!newptr)
 		return 0;
 
 	/* Copy the old data. */
-	oldsize = GET_SIZE(HDRP(oldptr));
+
 	if (size < oldsize)
 		oldsize = size;
 	memcpy(newptr, oldptr, oldsize);
@@ -415,7 +430,7 @@ static void *first_fit(size_t req_size)
 {
 
 	char *bp;
-	for (int i = 0; i < LIST_NO; i++)
+	for (int i = get_free_list_head(req_size); i < LIST_NO; i++)
 	{
 		for (bp = free_list_head[i]; GET_ALLOC(HDRP(bp)) == 0; bp =NEXT_FREE_BLK(bp) )
 		{
@@ -423,6 +438,14 @@ static void *first_fit(size_t req_size)
 				return bp;
 		}
 	}
+	/*for (int i = 0; i < get_free_list_head(req_size); i++)
+		{
+			for (bp = free_list_head[i]; GET_ALLOC(HDRP(bp)) == 0; bp =NEXT_FREE_BLK(bp) )
+			{
+				if (req_size <= (size_t) GET_SIZE(HDRP(bp)))
+					return bp;
+			}
+		}*/
 	return NULL ; // No fit
 }
 
@@ -503,7 +526,7 @@ static int get_free_list_head( unsigned int n)
 		count++;
 	}
 	if(count > LIST_NO-1 )
-		return  0;
+		return  LIST_NO-1;
 	return count;
 }
 
