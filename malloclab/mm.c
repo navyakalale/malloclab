@@ -104,6 +104,7 @@
 #define NEXT_FREE_BLK(bp) (*(char **)(bp))
 #define PREV_FREE_BLK(bp) (*((char **)(bp) + 1))
 
+
 /* Given block ptr bp, compute address of next and previous blocks */
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
@@ -123,7 +124,9 @@ static int get_free_list_head( unsigned int n);
 
 static char *heap_list_head = 0;
 static char *heap_header = 0;
-static char *free_list_head[LIST_NO];
+static char *free_list_head;
+
+#define GET_FREE_HEAD(i) (*((char **)(free_list_head) + i))
 //static int malloc_count = 0; /*DEbugging variables*/
 //static int free_count = 0;
 
@@ -133,7 +136,7 @@ static char *free_list_head[LIST_NO];
 void init_free_list(char *bp)
 {
 	for(int i=0;i<LIST_NO;i++)
-		free_list_head[i] = bp;
+		GET_FREE_HEAD(i) = bp;
 }
 
 /*
@@ -142,7 +145,7 @@ void init_free_list(char *bp)
 int mm_init(void)
 {
 
-	if ((heap_list_head = mem_sbrk(2 * HEADER_SIZE)) == NULL )
+	if ((heap_list_head = mem_sbrk(2 * HEADER_SIZE + 20*DSIZE)) == NULL )
 		return -1;
 
 	PUT(heap_list_head, 0); //Alignment padding
@@ -151,6 +154,8 @@ int mm_init(void)
 	PUT(heap_list_head + WSIZE, PACK(HEADER_SIZE, 1)); //WSIZE = padding
 	PUT(heap_list_head + DSIZE, 0); //pointer to next free block
 	PUT(heap_list_head + DSIZE+WSIZE, 0); //pointer to the previous free block
+
+	free_list_head = heap_list_head + 2*DSIZE + WSIZE;
 
 	/*initialize dummy block footer*/
 	PUT(heap_list_head + HEADER_SIZE, PACK(HEADER_SIZE, 1));
@@ -253,10 +258,10 @@ static void *coalesce(void *bp)
 static void insert_free_list(void *bp, int size)
 {
 	int free_list_index = get_free_list_head(size);
-	NEXT_FREE_BLK(bp) = free_list_head[free_list_index];
-	PREV_FREE_BLK(free_list_head[free_list_index]) = bp;
+	NEXT_FREE_BLK(bp) = GET_FREE_HEAD(free_list_index);
+	PREV_FREE_BLK(GET_FREE_HEAD(free_list_index)) = bp;
 	PREV_FREE_BLK(bp) = NULL;
-	free_list_head[free_list_index] = bp;
+	GET_FREE_HEAD(free_list_index) = bp;
 }
 
 /*remove_block - Removes the block from the free list
@@ -270,7 +275,7 @@ static void remove_block(void *bp, int size)
 	else
 	{
 		int free_list_index = get_free_list_head(size);
-		free_list_head[free_list_index] = NEXT_FREE_BLK(bp);
+		GET_FREE_HEAD(free_list_index) = NEXT_FREE_BLK(bp);
 	}
 	PREV_FREE_BLK(NEXT_FREE_BLK(bp)) = PREV_FREE_BLK(bp);
 }
@@ -432,7 +437,7 @@ static void *first_fit(size_t req_size)
 	char *bp;
 	for (int i = get_free_list_head(req_size); i < LIST_NO; i++)
 	{
-		for (bp = free_list_head[i]; GET_ALLOC(HDRP(bp)) == 0; bp =NEXT_FREE_BLK(bp) )
+		for (bp = GET_FREE_HEAD(i); GET_ALLOC(HDRP(bp)) == 0; bp =NEXT_FREE_BLK(bp) )
 		{
 			if (req_size <= (size_t) GET_SIZE(HDRP(bp)))
 				return bp;
